@@ -72,7 +72,45 @@ class LabeledLineSentence_contextual(object):
 		shuffle(self.sentences)
 		return self.sentences
 
+class LabeledLineSentence_contextual_doc2vec(object):
+	def __init__(self,tokenized):
+		self.sentences=[]
+		self.tokenized_docs = tokenized
+	def __iter__(self):
+		for idx,doc in enumerate(self.tokenized_docs):
+			tags_doc = [doc_prefix+"_"+str(idx)]
+			yield LabeledSentence(words=doc, tags=tags_doc)
+	def to_array(self):
+		for idx, doc in enumerate(self.tokenized_docs):
+			tags_doc = ["doc_id"+"_"+str(idx)]
+			self.sentences.append(LabeledSentence(words = doc,tags = tags_doc))
+		return self.sentences
+	def sentences_perm(self):
+		shuffle(self.sentences)
+		return self.sentences
 
+
+#train the doc2vec model
+n_iters = 10
+t0 = time()
+it = LabeledLineSentence_contextual_doc2vec(tokenized_data)
+doc2vec_model= Doc2Vec(size=400, window=5, min_count=4, dm=0,dbow_words=1,
+                              workers=50, alpha=0.025, min_alpha=0.025)
+doc2vec_model.build_vocab(it.to_array())
+print("done in %0.3fs." % (time() - t0))
+#done in 4.818s.
+index = 0
+for epoch in range(n_iters):
+	t0 = time()
+	doc2vec_model.train(it.sentences_perm())
+	doc2vec_model.alpha -= 0.002 # decrease the learning rate
+	doc2vec_model.min_alpha = model.alpha
+	index = index + 1
+	print("done in %0.3fs." % (time() - t0))
+	f.write("done in %0.3fs." % (time() - t0))
+
+
+#train the topic doc2vec model
 n_iters = 20
 dim = 400
 t0 = time()
@@ -109,14 +147,14 @@ def randomizeAndTrain(file,sentences,model,n_iter):
 
 f = open('word2vec_document_contextual','w')
 sentences = generateSentences(contexts_all)
-word2vec_model = Word2Vec(sentences, size=dim, window=10, hs = 1, workers = 5, min_count = 1)
+word2vec_model = Word2Vec(sentences, size=dim, window=2, hs = 1, workers = 5, min_count = 1)
 word2vec_model = randomizeAndTrain(f,tokenized_data,word2vec_model,10)
 f.close()
 
 
 
 
-
+###########Euclidean Distance#####################
 #word vectors from doc2vec model
 vectors_words_1 = []
 #sum of word vectors and document vectors from doc2vec model
@@ -177,6 +215,36 @@ cl_word2vec = pearsonr(distance_word2vec,avg_ratings)
 #(-0.34146071190521737, 7.0635236495147335e-56)
 
 
+###########Cosine Similarity#####################
+distance_cosine_topic2vec_words = []
+for a,b in zip(words_1, words_2):
+	if a.lower() in model.vocab and b.lower() in model.vocab:
+		distance_cosine_doc2vec_words.append(model.similarity(a.lower(),b.lower()))
+	else:
+		distance_cosine_doc2vec_words.append(0)
+
+distance_cosine_doc2vec_words = []
+for a,b in zip(words_1, words_2):
+	if a.lower() in doc2vec_model.vocab and b.lower() in doc2vec_model.vocab:
+		distance_cosine_doc2vec_words.append(doc2vec_model.similarity(a.lower(),b.lower()))
+	else:
+		distance_cosine_doc2vec_words.append(0)
+distance_cosine_word2vec = []
+for a,b in zip(words_1, words_2):
+	if a.lower() in word2vec_model.vocab and b.lower() in word2vec_model.vocab:
+		distance_cosine_word2vec.append(word2vec_model.similarity(a.lower(),b.lower()))
+	else:
+		distance_cosine_word2vec.append(0)
+
+distance_cosine_doc2vec_words = [model.similarity(a.lower(),b.lower()) for a,b in zip(words_1,words_2)]
+distance_cosine_word2vec= [word2vec_model.similarity(a.lower(),b.lower()) for a,b in zip(words_1,words_2)]
+
+
+pearsonr(distance_cosine_doc2vec_words,avg_ratings)
+#correlation=0.23295170632250459, pvalue=4.3346596012384097e-26)
+
+pearsonr(distance_cosine_word2vec,avg_ratings)
+#(0.34718305681323314, 7.9300262780344945e-58)
 
 
 #visualization
